@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Online Quiz Website (Python)</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #f4f6f9; color: #222; }
+    .topbar, .card { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 14px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    select, button { padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+    select { border: 1px solid #ccc; background: #fff; }
+    button { background: #2563eb; color: #fff; border: none; font-weight: bold; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .submit-btn { width: 100%; padding: 12px; font-size: 15px; }
+    .q-head { font-weight: bold; margin-bottom: 10px; }
+    .tag { font-size: 12px; background: #e0e7ff; color: #1d4ed8; padding: 2px 8px; border-radius: 12px; margin-left: 6px; }
+    .opt { display: block; padding: 6px 0; cursor: pointer; }
+    .ok { color: #16a34a; font-weight: bold; }
+    .bad { color: #dc2626; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Online Quiz Portal</h1>
+
+  <div class="topbar">
+    <div>
+      <label for="topicSelect"><strong>Topic:</strong></label>
+      <select id="topicSelect" onchange="loadQuestions()">
+        <option value="ALL">All Topics</option>
+        <option value="Python">Python</option>
+        <option value="Web">Web</option>
+      </select>
+    </div>
+    <button type="button" onclick="loadQuestions()">Restart / Shuffle</button>
+  </div>
+
+  <div id="questionsArea"></div>
+  <button class="submit-btn" type="button" onclick="submitQuiz()">Submit Quiz</button>
+  <div id="resultArea" class="card" style="display:none; margin-top:16px;"></div>
+
+  <script>
+    let currentQuestions = [];
+
+    async function loadQuestions() {
+      const topic = document.getElementById('topicSelect').value;
+      document.getElementById('resultArea').style.display = 'none';
+      const res = await fetch(`/api/questions?topic=${encodeURIComponent(topic)}`);
+      currentQuestions = await res.json();
+
+      const area = document.getElementById('questionsArea');
+      area.innerHTML = currentQuestions.map((q, idx) => `
+        <div class="card">
+          <div class="q-head">
+            ${idx + 1}. ${q.question}
+            <span class="tag">${q.topic}</span>
+          </div>
+          ${q.options.map(opt => `
+            <label class="opt">
+              <input type="radio" name="q_${q.id}" value="${opt}" /> ${opt}
+            </label>
+          `).join('')}
+        </div>
+      `).join('');
+    }
+
+    async function submitQuiz() {
+      const answers = {};
+      const questionIds = currentQuestions.map(q => q.id);
+
+      for (const q of currentQuestions) {
+        const checked = document.querySelector(`input[name="q_${q.id}"]:checked`);
+        answers[String(q.id)] = checked ? checked.value : null;
+      }
+
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers, questionIds })
+      });
+      const data = await res.json();
+
+      const out = document.getElementById('resultArea');
+      out.style.display = 'block';
+      out.innerHTML = `
+        <h2>Score: ${data.score} / ${data.total}</h2>
+        <hr />
+        ${data.details.map((d, i) => `
+          <p>
+            <strong>${i + 1}. ${d.question}</strong><br />
+            Your answer: <span class="${d.isCorrect ? 'ok' : 'bad'}">${d.userAnswer ?? 'Not answered'}</span>
+            | Correct answer: <span class="ok">${d.correctAnswer}</span>
+          </p>
+        `).join('')}
+      `;
+    }
+
+    loadQuestions();
+  </script>
+</body>
+</html>
